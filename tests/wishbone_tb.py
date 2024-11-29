@@ -1,5 +1,3 @@
-"""Testbench for the Wishbone interface using Cocotb."""
-
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge
