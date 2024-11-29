@@ -1,5 +1,3 @@
-"""Script to generate the project's credits."""
-
 from __future__ import annotations
 
 import os
@@ -14,15 +12,18 @@ from typing import Mapping, cast
 from jinja2 import StrictUndefined
 from jinja2.sandbox import SandboxedEnvironment
 
-# TODO: Remove once support for Python 3.10 is dropped.
+# Support for older Python versions
 if sys.version_info >= (3, 11):
     import tomllib
 else:
     import tomli as tomllib
 
+# Load project configuration
 project_dir = Path(os.getenv("MKDOCS_CONFIG_DIR", "."))
 with project_dir.joinpath("pyproject.toml").open("rb") as pyproject_file:
     pyproject = tomllib.load(pyproject_file)
+
+# Project and dependencies data
 project = pyproject["project"]
 pdm = pyproject["tool"]["pdm"]
 with project_dir.joinpath("pdm.lock").open("rb") as lock_file:
@@ -33,6 +34,7 @@ regex = re.compile(r"(?P<dist>[\w.-]+)(?P<spec>.*)$")
 
 
 def _get_license(pkg_name: str) -> str:
+    """Fetch the license for a given package name."""
     try:
         data = metadata(pkg_name)
     except PackageNotFoundError:
@@ -47,6 +49,7 @@ def _get_license(pkg_name: str) -> str:
 
 
 def _get_deps(base_deps: Mapping[str, Mapping[str, str]]) -> dict[str, dict[str, str]]:
+    """Retrieve the dependencies and their details."""
     deps = {}
     for dep in base_deps:
         parsed = regex.match(dep).groupdict()  # type: ignore[union-attr]
@@ -78,11 +81,11 @@ def _get_deps(base_deps: Mapping[str, Mapping[str, str]]) -> dict[str, dict[str,
                             **lock_pkgs[dep_name],
                         }
                         again = True
-
     return deps
 
 
 def _render_credits() -> str:
+    """Render the credits page."""
     dev_dependencies = _get_deps(chain(*pdm.get("dev-dependencies", {}).values()))  # type: ignore[arg-type]
     prod_dependencies = _get_deps(
         chain(  # type: ignore[arg-type]
@@ -140,4 +143,5 @@ def _render_credits() -> str:
     return jinja_env.from_string(template_text).render(**template_data)
 
 
-print(_render_credits())
+if __name__ == "__main__":
+    print(_render_credits())
