@@ -1,8 +1,8 @@
-
+from typing import Any, Dict
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge
-from typing import Any, Dict
+
 
 class WishboneDriver:
     """Driver for Wishbone bus. Provides methods for performing read and write operations."""
