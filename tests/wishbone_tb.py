@@ -59,7 +59,6 @@ class WishboneScoreboard:
 @cocotb.test()
 async def test_wb_interface(dut: Any) -> None:
     """Test the Wishbone interface by performing write and read operations and validating results using a scoreboard.
-    
     Args:
         dut: The device under test.
         
