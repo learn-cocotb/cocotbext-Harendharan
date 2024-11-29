@@ -88,12 +88,15 @@ def _get_deps(base_deps: Mapping[str, Mapping[str, str]]) -> dict[str, dict[str,
 
 def _render_credits() -> str:
     """Render and generate the credit page for the project."""
-    dev_dependencies = _get_deps(chain(*pdm.get("dev-dependencies", {}).values()))
+    # Fix: Convert chain into a Mapping to pass to _get_deps
+    dev_dependencies = _get_deps(dict(chain(*pdm.get("dev-dependencies", {}).values())))
     prod_dependencies = _get_deps(
-        chain(
-            project.get("dependencies", []),
-            chain(*project.get("optional-dependencies", {}).values()),
-        ),
+        dict(
+            chain(
+                project.get("dependencies", []),
+                chain(*project.get("optional-dependencies", {}).values()),
+            )
+        )
     )
 
     template_data = {
