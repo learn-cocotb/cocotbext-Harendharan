@@ -1,9 +1,7 @@
-import cocotb
-from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, Timer
 import logging
-from typing import Any, Dict
-
+from cocotb.triggers import RisingEdge, Timer
+from typing import Any
+from cocotb.utils import get_sim_time
 
 class WishboneDriver:
     """Driver for Wishbone bus. Provides methods for performing read and write operations."""
