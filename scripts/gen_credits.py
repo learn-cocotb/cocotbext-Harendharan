@@ -136,5 +136,7 @@ def _render_credits() -> str:
     return jinja_env.from_string(template_text).render(**template_data)
 
 
-# Print out the generated credits
-print(_render_credits())
+# Generate and output the credits
+credits_page = _render_credits()
+# Instead of using print, you can either assert or log the credits for testing purposes
+assert credits_page  # Example of a simple assertion to check output
