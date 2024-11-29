@@ -1,113 +1,75 @@
-from typing import Any
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, Timer, Event
-from cocotb.queue import Queue
-from cocotb.utils import get_sim_time
-
-
-class WishboneTransaction:
-    """Transaction: Data members for each Wishbone signal."""
-    
-    def __init__(self, address: int, data: int, expected_data: int, tag: str = '') -> None:
-        """
-        Initialize a transaction with address, data, expected_data, and optional tag.
-        
-        Args:
-            address (int): Address for the transaction.
-            data (int): Data to be written to the address.
-            expected_data (int): Expected data after the transaction.
-            tag (str): Optional tag for the transaction details.
-        """
-        self.address = address
-        self.data = data
-        self.expected_data = expected_data
-        self.tag = tag
+from cocotb.triggers import RisingEdge, Timer
+import logging
+from typing import Any, Dict
 
 
 class WishboneDriver:
     """Driver for Wishbone bus. Provides methods for performing read and write operations."""
 
-    def __init__(self, queue: Queue, dut: Any) -> None:
-        """Initialize the driver with required parameters."""
-        self.queue = queue
+    def __init__(self, dut: Any) -> None:
+        """Initialize the driver with the DUT (Device Under Test)."""
         self.dut = dut
 
-    async def apply_reset(self) -> None:
-        """Apply and release reset signal."""
-        self.dut.rst.value = 1
-        await Timer(50, units="ns")
-        self.dut.rst.value = 0
-        print("-------- Reset Released @", str(get_sim_time(units="ns")), "--------")
-        await Timer(50, units="ns")
-
-    async def send_transaction(self, transaction: WishboneTransaction) -> None:
-        """Driver: Apply random transactions to DUT."""
-        self.dut.wishbone.adr.value = transaction.address
-        self.dut.wishbone.dat.value = transaction.data
-        self.dut.wishbone.we.value = 1
+    async def write(self, address: int, data: int, tag: str = "Write") -> None:
+        """Write data to the Wishbone bus."""
+        self.dut.wishbone.adr.value = address
+        self.dut.wishbone.dat.value = data
         self.dut.wishbone.cyc.value = 1
         self.dut.wishbone.stb.value = 1
-        print(transaction.tag, f"Address: {transaction.address}, Data: {transaction.data}, Expected: {transaction.expected_data}")
-        
+        self.dut.wishbone.we.value = 1
+        logging.info(f"{tag}: Address: {address}, Data: {data}")
         await RisingEdge(self.dut.clk)
         self.dut.wishbone.cyc.value = 0
         self.dut.wishbone.stb.value = 0
-        await RisingEdge(self.dut.ack)
-        print("Transaction Completed: Address =", transaction.address, "Data =", transaction.data)
+
+    async def read(self, address: int, tag: str = "Read") -> int:
+        """Read data from the Wishbone bus."""
+        self.dut.wishbone.adr.value = address
+        self.dut.wishbone.cyc.value = 1
+        self.dut.wishbone.stb.value = 1
+        self.dut.wishbone.we.value = 0
+        await RisingEdge(self.dut.clk)
+        data = self.dut.wishbone.dat.value
+        self.dut.wishbone.cyc.value = 0
+        self.dut.wishbone.stb.value = 0
+        logging.info(f"{tag}: Address: {address}, Data: {data}")
+        return data
 
 
-class WishboneScoreboard:
-    """Scoreboard: Verify the correctness of transactions."""
-
-    def __init__(self, dut: Any) -> None:
-        """Initialize scoreboard with the DUT object."""
-        self.dut = dut
-        self.expected_transactions: Queue = Queue()
-
-    def add_expected_transaction(self, transaction: WishboneTransaction) -> None:
-        """Add an expected transaction to the scoreboard."""
-        self.expected_transactions.put_nowait(transaction)
-
-    def check_transaction(self, transaction: WishboneTransaction) -> None:
-        """Check the received transaction against the expected transaction."""
-        try:
-            expected = self.expected_transactions.get_nowait()
-            if expected.data == transaction.data:
-                print(f"Transaction Passed: Address: {transaction.address}, Data: {transaction.data}")
-            else:
-                print(f"Transaction Failed: Address: {transaction.address}, Expected: {expected.data}, Got: {transaction.data}")
-        except Exception as e:
-            print(f"Unexpected Transaction: Address: {transaction.address}, Data: {transaction.data}")
-            print("Error:", e)
-
-
-class Testbench:
-    """Testbench: Initialize and run the test with cocotb."""
+class WishboneTB:
+    """Testbench for the Wishbone interface."""
 
     def __init__(self, dut: Any) -> None:
-        """Initialize the testbench with the DUT object."""
+        """Initialize the testbench with the DUT (Device Under Test)."""
         self.dut = dut
-        self.driver = WishboneDriver(Queue(), dut)
-        self.scoreboard = WishboneScoreboard(dut)
+        self.driver = WishboneDriver(dut)
 
-    async def run_test(self) -> None:
-        """Test entry point for cocotb."""
-        await self.driver.apply_reset()
+    async def reset(self) -> None:
+        """Reset the DUT."""
+        self.dut.rst.value = 1
+        await Timer(50, units="ns")
+        self.dut.rst.value = 0
+        logging.info(f"-------- Reset Released @ {get_sim_time(units='ns')} --------")
+        await Timer(50, units="ns")
 
-        # Create transactions and add them to the scoreboard
-        transaction1 = WishboneTransaction(address=0x00, data=0x01, expected_data=0x01, tag="Write Transaction")
-        self.scoreboard.add_expected_transaction(transaction1)
+    async def run(self) -> None:
+        """Run the Wishbone transactions."""
+        await self.reset()
 
-        # Send transaction and check the result
-        await self.driver.send_transaction(transaction1)
-        self.scoreboard.check_transaction(transaction1)
+        # Perform write and read operations
+        await self.driver.write(0x10, 0x1234, "Write 1")
+        await self.driver.write(0x20, 0x5678, "Write 2")
 
+        data = await self.driver.read(0x10, "Read 1")
+        if data == 0x1234:
+            logging.info(f"Transaction Passed: Address: 0x10, Data: {data}")
+        else:
+            logging.error(f"Transaction Failed: Address: 0x10, Expected: 0x1234, Got: {data}")
 
-# Testbench entry point
-@cocotb.coroutine
-async def run_test(dut: Any) -> None:
-    """Test entry point for cocotb."""
-    tb = Testbench(dut)
-    await tb.run_test()
-
+        data = await self.driver.read(0x20, "Read 2")
+        if data == 0x5678:
+            logging.info(f"Transaction Passed: Address: 0x20, Data: {data}")
+        else:
+            logging.error(f"Transaction Failed: Address: 0x20, Expected: 0x5678, Got: {data}")
