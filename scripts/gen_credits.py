@@ -7,7 +7,7 @@ from importlib.metadata import PackageNotFoundError, metadata
 from itertools import chain
 from pathlib import Path
 from textwrap import dedent
-from typing import Mapping, Dict, Any
+from typing import Mapping, Any
 
 from jinja2 import StrictUndefined
 from jinja2.sandbox import SandboxedEnvironment
@@ -47,9 +47,9 @@ def _get_license(pkg_name: str) -> str:
     return license_name or "?"
 
 
-def _get_deps(base_deps: Mapping[str, Any]) -> Dict[str, Dict[str, Any]]:
+def _get_deps(base_deps: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Process dependencies and return details about each one."""
-    deps: Dict[str, Dict[str, Any]] = {}
+    deps: dict[str, dict[str, Any]] = {}
     for dep in base_deps:
         parsed = regex.match(dep)
         if not parsed:
