@@ -1,5 +1,3 @@
-"""Script to generate the project's credits."""
-
 from __future__ import annotations
 
 import os
@@ -9,7 +7,7 @@ from importlib.metadata import PackageNotFoundError, metadata
 from itertools import chain
 from pathlib import Path
 from textwrap import dedent
-from typing import Mapping
+from typing import Mapping, Dict, Any
 
 from jinja2 import StrictUndefined
 from jinja2.sandbox import SandboxedEnvironment
@@ -49,9 +47,9 @@ def _get_license(pkg_name: str) -> str:
     return license_name or "?"
 
 
-def _get_deps(base_deps: Mapping[str, Mapping[str, str]]) -> dict[str, dict[str, str]]:
+def _get_deps(base_deps: Mapping[str, Any]) -> Dict[str, Dict[str, Any]]:
     """Process dependencies and return details about each one."""
-    deps = {}
+    deps: Dict[str, Dict[str, Any]] = {}
     for dep in base_deps:
         parsed = regex.match(dep)
         if not parsed:
@@ -103,7 +101,7 @@ def _render_credits() -> str:
         "more_credits": "",  # Placeholder for any additional credits
     }
 
-    template_text = dedent("""
+    template_text = dedent("""\
         # Credits
 
         These projects were used to build *{{ project_name }}*. **Thank you!**
@@ -141,4 +139,3 @@ def _render_credits() -> str:
 
 # Print out the generated credits
 print(_render_credits())
-
