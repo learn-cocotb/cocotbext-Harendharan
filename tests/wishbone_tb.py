@@ -7,34 +7,34 @@ class WishboneDriver:
     """Driver for Wishbone bus. Provides methods for performing read and write operations."""
 
     def __init__(self, dut: Any) -> None:
-        """Initialize the driver with the DUT (Device Under Test)."""
         self.dut = dut
+        self.busy = False
 
-    async def write(self, address: int, data: int, tag: str = "Write") -> None:
-        """Write data to the Wishbone bus."""
-        self.dut.wishbone.adr.value = address
-        self.dut.wishbone.dat.value = data
-        self.dut.wishbone.cyc.value = 1
-        self.dut.wishbone.stb.value = 1
-        self.dut.wishbone.we.value = 1
-        logging.info(f"{tag}: Address: {address}, Data: {data}")
+    async def write(self, address: int, data: int) -> None:
+        """Write data to the specified address."""
+        self.busy = True
+        self.dut.wb_cyc <= 1
+        self.dut.wb_stb <= 1
+        self.dut.wb_we <= 1
+        self.dut.wb_addr <= address
+        self.dut.wb_data <= data
         await RisingEdge(self.dut.clk)
-        self.dut.wishbone.cyc.value = 0
-        self.dut.wishbone.stb.value = 0
+        self.dut.wb_stb <= 0
+        self.dut.wb_cyc <= 0
+        self.busy = False
 
-    async def read(self, address: int, tag: str = "Read") -> int:
-        """Read data from the Wishbone bus."""
-        self.dut.wishbone.adr.value = address
-        self.dut.wishbone.cyc.value = 1
-        self.dut.wishbone.stb.value = 1
-        self.dut.wishbone.we.value = 0
+    async def read(self, address: int) -> int:
+        """Read data from the specified address."""
+        self.busy = True
+        self.dut.wb_cyc <= 1
+        self.dut.wb_stb <= 1
+        self.dut.wb_we <= 0
+        self.dut.wb_addr <= address
         await RisingEdge(self.dut.clk)
-        data = self.dut.wishbone.dat.value
-        self.dut.wishbone.cyc.value = 0
-        self.dut.wishbone.stb.value = 0
-        logging.info(f"{tag}: Address: {address}, Data: {data}")
-        return data
-
+        self.dut.wb_stb <= 0
+        self.dut.wb_cyc <= 0
+        self.busy = False
+        return int(self.dut.wb_data)
 
 class WishboneTB:
     """Testbench for the Wishbone interface."""
