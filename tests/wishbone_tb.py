@@ -1,7 +1,7 @@
-
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, FallingEdge, Timer
+from cocotb.triggers import RisingEdge, Timer
+
 
 class WishboneDriver:
     def __init__(self, dut):
@@ -16,14 +16,16 @@ class WishboneDriver:
         self.dut.start_i.value = 0
 
     async def ack(self):
-        await Timer(20, units="ns")  # Delay for acknowledgment
-        self.dut.wb_ack_i.value = 1
-        await RisingEdge(self.dut.clk)
-        self.dut.wb_ack_i.value = 0
+        # Use a clock edge instead of a fixed delay for acknowledgment
+        while True:
+            await RisingEdge(self.dut.clk)
+            if self.dut.wb_ack_i.value == 1:
+                self.dut.wb_ack_i.value = 0
+                break
 
     async def read(self, address):
         self.dut.start_i.value = 1
-        self.dut.we_i.value = 0  # Read enable (Write is disabled)
+        self.dut.we_i.value = 0  # Read enable
         self.dut.addr_i.value = address
         await RisingEdge(self.dut.clk)
         self.dut.start_i.value = 0
@@ -34,17 +36,29 @@ class WishboneDriver:
 class WishboneMonitor:
     def __init__(self, dut):
         self.dut = dut
-        self.data = {}
+        self.data = {
+            "wb_stb_o": 0,
+            "wb_cyc_o": 0,
+            "wb_adr_o": 0,
+            "wb_dat_o": 0,
+            "wb_ack_i": 0,
+            "busy_o": 0,
+        }
 
     async def monitor(self):
         while True:
             await RisingEdge(self.dut.clk)
-            self.data['wb_stb_o'] = self.dut.wb_stb_o.value
-            self.data['wb_cyc_o'] = self.dut.wb_cyc_o.value
-            self.data['wb_adr_o'] = self.dut.wb_adr_o.value
-            self.data['wb_dat_o'] = self.dut.wb_dat_o.value
-            self.data['wb_ack_i'] = self.dut.wb_ack_i.value
-            self.data['busy_o'] = self.dut.busy_o.value
+            # Update data atomically to avoid race conditions
+            self.data.update(
+                {
+                    "wb_stb_o": self.dut.wb_stb_o.value,
+                    "wb_cyc_o": self.dut.wb_cyc_o.value,
+                    "wb_adr_o": self.dut.wb_adr_o.value,
+                    "wb_dat_o": self.dut.wb_dat_o.value,
+                    "wb_ack_i": self.dut.wb_ack_i.value,
+                    "busy_o": self.dut.busy_o.value,
+                }
+            )
 
 
 class WishboneScoreboard:
@@ -56,24 +70,30 @@ class WishboneScoreboard:
 
     def check(self, monitor_data):
         for signal, expected_value in self.expected.items():
-            if monitor_data.get(signal) != expected_value:
-                raise AssertionError(f"{signal} mismatch: Expected {expected_value}, got {monitor_data.get(signal)}")
+            actual_value = monitor_data.get(signal)
+            assert actual_value == expected_value, (
+                f"{signal} mismatch: Expected {expected_value}, got {actual_value}"
+            )
+
+
+async def apply_reset(dut, cycles=3):
+    dut.a_reset_l.value = 0
+    for _ in range(cycles):
+        await RisingEdge(dut.clk)
+    dut.a_reset_l.value = 1
+    await RisingEdge(dut.clk)
 
 
 @cocotb.test()
 async def test_wb_interface(dut):
-
-    # Generate a clock signal clk
-    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())  # 10ns clock period
+    # Generate a clock signal
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
 
     # Apply reset
     print("Applying reset")
-    dut.a_reset_l.value = 0
-    for _ in range(3):  # Keep reset for 3 clock cycles
-        await RisingEdge(dut.clk)
-    dut.a_reset_l.value = 1
-    await RisingEdge(dut.clk)
-    print("Reset complete.")
+    await apply_reset(dut)
+    print("Reset complete")
 
     # Instantiate driver, monitor, and scoreboard
     driver = WishboneDriver(dut)
@@ -84,37 +104,39 @@ async def test_wb_interface(dut):
     cocotb.start_soon(monitor.monitor())
 
     # Expected values for the write operation
-    scoreboard.expect('wb_stb_o', 1)
-    scoreboard.expect('wb_cyc_o', 1)
-    scoreboard.expect('wb_adr_o', 0x0010)
-    scoreboard.expect('wb_dat_o', 0x1234)
+    write_address = 0x0010
+    write_data = 0x1234
+    scoreboard.expect("wb_stb_o", 1)
+    scoreboard.expect("wb_cyc_o", 1)
+    scoreboard.expect("wb_adr_o", write_address)
+    scoreboard.expect("wb_dat_o", write_data)
 
     # Start Write Operation
-    print("Starting Write Operation")
-    await driver.write(0x0010, 0x1234)
+    print("Starting write operation")
+    await driver.write(write_address, write_data)
 
     # Simulate Wishbone acknowledgment
-    print("Simulating acknowledgment signal")
+    print("Waiting for acknowledgment signal")
     await driver.ack()
 
-    # Verify busy_o deasserts after completion
+    # Verify `busy_o` deasserts after completion
+    print("Verifying busy signal deassertion")
     for _ in range(5):  # Wait for up to 5 clock cycles
         await RisingEdge(dut.clk)
         if dut.busy_o.value == 0:
             break
     else:
-        print("Error: Busy signal not deasserted after write operation")
-        assert False, "Busy signal not deasserted after write"
+        assert False, "Busy signal not deasserted after write operation"
 
     print("Write operation completed successfully")
 
-    # Check outputs 
+    # Check outputs
     scoreboard.check(monitor.data)
 
     # Start Read Operation
-    print("Starting Read Operation")
-    read_data = await driver.read(0x0010)
+    print("Starting read operation")
+    read_data = await driver.read(write_address)
 
     # Check if the data read matches the expected value
-    assert read_data == 0x1234, f"Read data mismatch: Expected 0x1234, got {read_data}"
-    print(f"Read operation completed successfully, Data: {read_data}")
+    assert read_data == write_data, f"Read data mismatch: Expected {write_data}, got {read_data}"
+    print(f"Read operation completed successfully. Data: {read_data}")
