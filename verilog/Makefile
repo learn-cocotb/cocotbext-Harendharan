@@ -1,6 +1,6 @@
  SIM ?= icarus
 TOPLEVEL_LANG ?= verilog
-VERILOG_SOURCES += ./verilog/wb_interface.v
-TOPLEVEL = wb_interface
+VERILOG_SOURCES += ./verilog/wishbone.v
+TOPLEVEL = wishbone
 MODULE = testbench
 include $(shell cocotb-config --makefiles)/Makefile.sim
