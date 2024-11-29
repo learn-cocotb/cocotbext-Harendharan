@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import os
 import re
 import sys
@@ -7,7 +6,7 @@ from importlib.metadata import PackageNotFoundError, metadata
 from itertools import chain
 from pathlib import Path
 from textwrap import dedent
-from typing import Mapping, Any
+from typing import Any  # Removed 'Mapping' import as it is not used
 
 from jinja2 import StrictUndefined
 from jinja2.sandbox import SandboxedEnvironment
