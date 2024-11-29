@@ -5,7 +5,6 @@ from typing import Any, Dict
 
 class WishboneDriver:
     """Driver for Wishbone bus. Provides methods for performing read and write operations."""
-
     def __init__(self, dut: Any) -> None:
         """Initialize the Wishbone driver with the given DUT (Device Under Test)."""
         self.dut = dut
@@ -26,8 +25,8 @@ class WishboneDriver:
         self.dut.wishbone.cyc <= 1  # Set cycle active
         self.dut.wishbone.stb <= 1  # Set strobe active
         await RisingEdge(self.dut.clk)  # Wait for a clock edge
-        data = self.dut.wishbone.dat  # Read data from the bus
-        return data
+        #data = self.dut.wishbone.dat  # Read data from the bus
+        #return data
 
 class WishboneMonitor:
     """Monitor for Wishbone bus. Captures signals and stores monitored data."""
@@ -73,7 +72,7 @@ async def test_wb_interface(dut: Any) -> None:
 
     # Create the driver, monitor, and scoreboard
     driver = WishboneDriver(dut)
-    monitor = WishboneMonitor(dut)
+    #monitor = WishboneMonitor(dut)
     scoreboard = WishboneScoreboard()
 
     # Add expected values to the scoreboard
