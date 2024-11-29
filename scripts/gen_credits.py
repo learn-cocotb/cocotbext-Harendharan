@@ -20,11 +20,14 @@ if sys.version_info >= (3, 11):
 else:
     import tomli as tomllib
 
+# Set project directory and load pyproject.toml
 project_dir = Path(os.getenv("MKDOCS_CONFIG_DIR", "."))
 with project_dir.joinpath("pyproject.toml").open("rb") as pyproject_file:
     pyproject = tomllib.load(pyproject_file)
 project = pyproject["project"]
 pdm = pyproject["tool"]["pdm"]
+
+# Load pdm.lock and package data
 with project_dir.joinpath("pdm.lock").open("rb") as lock_file:
     lock_data = tomllib.load(lock_file)
 lock_pkgs = {pkg["name"].lower(): pkg for pkg in lock_data["package"]}
@@ -33,6 +36,7 @@ regex = re.compile(r"(?P<dist>[\w.-]+)(?P<spec>.*)$")
 
 
 def _get_license(pkg_name: str) -> str:
+    """Retrieve the license information for a given package."""
     try:
         data = metadata(pkg_name)
     except PackageNotFoundError:
@@ -47,6 +51,7 @@ def _get_license(pkg_name: str) -> str:
 
 
 def _get_deps(base_deps: Mapping[str, Mapping[str, str]]) -> dict[str, dict[str, str]]:
+    """Retrieve the dependencies of the project."""
     deps = {}
     for dep in base_deps:
         parsed = regex.match(dep).groupdict()  # type: ignore[union-attr]
@@ -83,6 +88,7 @@ def _get_deps(base_deps: Mapping[str, Mapping[str, str]]) -> dict[str, dict[str,
 
 
 def _render_credits() -> str:
+    """Render the credits template with project and dependencies data."""
     dev_dependencies = _get_deps(chain(*pdm.get("dev-dependencies", {}).values()))  # type: ignore[arg-type]
     prod_dependencies = _get_deps(
         chain(  # type: ignore[arg-type]
@@ -103,6 +109,7 @@ def _render_credits() -> str:
         ),
         "more_credits": "",
     }
+
     template_text = dedent(
         """
         # Credits
@@ -136,6 +143,7 @@ def _render_credits() -> str:
         {% if more_credits %}**[More credits from the author]({{ more_credits }})**{% endif %}
         """,
     )
+
     jinja_env = SandboxedEnvironment(undefined=StrictUndefined)
     return jinja_env.from_string(template_text).render(**template_data)
 
