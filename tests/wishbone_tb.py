@@ -12,25 +12,23 @@ class WishboneDriver:
     async def write(self, address: int, data: int) -> None:
         """Write data to a given address on the Wishbone bus."""
         # Set the address and data lines (adjust according to your DUT's interface)
-        self.dut.wishbone.adr <= address
-        self.dut.wishbone.dat <= data
-        self.dut.wishbone.we <= 1  # Set write enable
+        self.dut.wishbone.adr = address
+        self.dut.wishbone.dat = data
+        self.dut.wishbone.we = 1  # Set write enable
         await RisingEdge(self.dut.clk)  # Wait for a clock edge
-        self.dut.wishbone.we <= 0  # Clear write enable after operation
+        self.dut.wishbone.we = 0  # Clear write enable after operation
 
     async def read(self, address: int) -> int:
         """Read data from a given address on the Wishbone bus."""
         # Set the address for the read operation
-        self.dut.wishbone.adr <= address
-        self.dut.wishbone.cyc <= 1  # Set cycle active
-        self.dut.wishbone.stb <= 1  # Set strobe active
+        self.dut.wishbone.adr = address
+        self.dut.wishbone.cyc = 1  # Set cycle active
+        self.dut.wishbone.stb = 1  # Set strobe active
         await RisingEdge(self.dut.clk)  # Wait for a clock edge
-        #data = self.dut.wishbone.dat  # Read data from the bus
-        #return data
+        return self.dut.wishbone.dat.value
 
 class WishboneMonitor:
     """Monitor for Wishbone bus. Captures signals and stores monitored data."""
-
     def __init__(self, dut: Any) -> None:
         """Initialize the monitor with the given DUT (Device Under Test)."""
         self.dut = dut
@@ -45,7 +43,6 @@ class WishboneMonitor:
 
 class WishboneScoreboard:
     """Scoreboard for validating the Wishbone interface."""
-
     def __init__(self) -> None:
         """Initialize the Wishbone scoreboard."""
         self.expected: Dict[int, int] = {}  # Use int for address keys instead of string
@@ -62,7 +59,6 @@ class WishboneScoreboard:
 @cocotb.test()
 async def test_wb_interface(dut: Any) -> None:
     """Test the Wishbone interface by performing write and read operations and validating results using a scoreboard.
-
     Args:
         dut: The device under test.
     """
@@ -72,7 +68,6 @@ async def test_wb_interface(dut: Any) -> None:
 
     # Create the driver, monitor, and scoreboard
     driver = WishboneDriver(dut)
-    #monitor = WishboneMonitor(dut)
     scoreboard = WishboneScoreboard()
 
     # Add expected values to the scoreboard
