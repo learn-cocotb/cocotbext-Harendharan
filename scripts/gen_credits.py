@@ -88,15 +88,12 @@ def _get_deps(base_deps: Mapping[str, Mapping[str, str]]) -> dict[str, dict[str,
 
 def _render_credits() -> str:
     """Render and generate the credit page for the project."""
-    # Fix: Convert chain into a Mapping to pass to _get_deps
-    dev_dependencies = _get_deps(dict(chain(*pdm.get("dev-dependencies", {}).values())))
+    dev_dependencies = _get_deps(chain(*pdm.get("dev-dependencies", {}).values()))
     prod_dependencies = _get_deps(
-        dict(
-            chain(
-                project.get("dependencies", []),
-                chain(*project.get("optional-dependencies", {}).values()),
-            )
-        )
+        chain(
+            project.get("dependencies", []),
+            chain(*project.get("optional-dependencies", {}).values()),
+        ),
     )
 
     template_data = {
@@ -111,12 +108,12 @@ def _render_credits() -> str:
 
         These projects were used to build *{{ project_name }}*. **Thank you!**
 
-        [`python`](https://www.python.org/) |
-        [`pdm`](https://pdm.fming.dev/) |
-        [`copier-pdm`](https://github.com/pawamoy/copier-pdm)
+        [python](https://www.python.org/) |
+        [pdm](https://pdm.fming.dev/) |
+        [copier-pdm](https://github.com/pawamoy/copier-pdm)
 
         {% macro dep_line(dep) -%}
-        [`{{ dep.name }}`](https://pypi.org/project/{{ dep.name }}/) | {{ dep.summary }} | {{ ("`" ~ dep.spec ~ "`") if dep.spec else "" }} | `{{ dep.version }}` | {{ dep.license }}
+        [{{ dep.name }}](https://pypi.org/project/{{ dep.name }}/) | {{ dep.summary }} | {{ ("" ~ dep.spec ~ "") if dep.spec else "" }} | {{ dep.version }} | {{ dep.license }}
         {%- endmacro %}
 
         ### Runtime dependencies
@@ -144,3 +141,4 @@ def _render_credits() -> str:
 
 # Print out the generated credits
 print(_render_credits())
+
