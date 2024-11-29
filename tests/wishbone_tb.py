@@ -1,5 +1,5 @@
 """Testbench for the Wishbone interface using Cocotb."""
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import cocotb
 from cocotb.clock import Clock
@@ -28,18 +28,20 @@ class WishboneDriver:
         await RisingEdge(self.dut.clk)
         return self.dut.wishbone.dat.value
 
+
 class WishboneMonitor:
     """Monitor for Wishbone bus. Captures signals and stores monitored data."""
     def __init__(self, dut: Any) -> None:
         """Initialize the monitor with the given DUT (Device Under Test)."""
         self.dut = dut
-        self.data = []
+        self.data: List[Any] = []  # Annotated the type of data list
 
     async def monitor(self) -> None:
         """Monitor the Wishbone signals and store the data."""
         while True:
             await RisingEdge(self.dut.clk)
             self.data.append(self.dut.wishbone.dat)
+
 
 class WishboneScoreboard:
     """Scoreboard for validating the Wishbone interface."""
@@ -55,6 +57,7 @@ class WishboneScoreboard:
         """Validate the received data against the expected values."""
         if address in self.expected:
             assert self.expected[address] == data, f"Mismatch at address {address}: expected {self.expected[address]}, got {data}"
+
 
 @cocotb.test()
 async def test_wb_interface(dut: Any) -> None:
