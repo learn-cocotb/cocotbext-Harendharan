@@ -1,146 +1,80 @@
-"""
-This module generates a credits page for the project by processing dependencies.
-It retrieves information from the project metadata and generates a formatted list of dependencies used in the project.
-"""
+import cocotb
+from cocotb.regression import TestFactory
+from cocotb.clock import Clock
+from cocotb.triggers import RisingEdge
+from typing import Any, Dict
 
-from __future__ import annotations
+# Define the Wishbone interface driver
+class WishboneDriver:
+    def __init__(self, dut: Any) -> None:
+        self.dut = dut
 
-import os
-import re
-import sys
-from importlib.metadata import PackageNotFoundError, metadata
-from itertools import chain
-from pathlib import Path
-from textwrap import dedent
-from typing import Any
+    async def write(self, address: int, data: int) -> None:
+        self.dut.wishbone.adr = address
+        self.dut.wishbone.dat = data
+        self.dut.wishbone.we = 1
+        await RisingEdge(self.dut.clk)
+        self.dut.wishbone.we = 0
 
-from jinja2 import StrictUndefined
-from jinja2.sandbox import SandboxedEnvironment
+    async def read(self, address: int) -> int:
+        self.dut.wishbone.adr = address
+        self.dut.wishbone.cyc = 1
+        self.dut.wishbone.stb = 1
+        await RisingEdge(self.dut.clk)
+        return self.dut.wishbone.dat.value
 
-# Support for Python 3.11+
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
+# Define the monitor class to capture the signals
+class WishboneMonitor:
+    def __init__(self, dut: Any) -> None:
+        self.dut = dut
+        self.data = []
 
-# Define project directories and load configuration
-project_dir = Path(os.getenv("MKDOCS_CONFIG_DIR", "."))
-with project_dir.joinpath("pyproject.toml").open("rb") as pyproject_file:
-    pyproject = tomllib.load(pyproject_file)
-project = pyproject.get("project", {})
-pdm = pyproject.get("tool", {}).get("pdm", {})
-with project_dir.joinpath("pdm.lock").open("rb") as lock_file:
-    lock_data = tomllib.load(lock_file)
+    async def monitor(self) -> None:
+        while True:
+            await RisingEdge(self.dut.clk)
+            self.data.append(self.dut.wishbone.dat)
 
-# Lock package data
-lock_pkgs = {pkg["name"].lower(): pkg for pkg in lock_data["package"]}
+# Define the scoreboard for validating read/write operations
+class WishboneScoreboard:
+    def __init__(self) -> None:
+        self.expected: Dict[int, int] = {}
 
-# Regular expression to parse package dependency information
-regex = re.compile(r"(?P<dist>[\w.-]+)(?P<spec>.*)$")
+    def add_expected(self, address: int, data: int) -> None:
+        self.expected[address] = data
 
-def _get_license(pkg_name: str) -> str:
-    """Fetch the license of a package from its metadata."""
-    try:
-        data = metadata(pkg_name)
-    except PackageNotFoundError:
-        return "?"
-    license_name = data.get("License", "").strip()
-    if not license_name or license_name == "UNKNOWN":
-        for header, value in data.items():
-            if header == "Classifier" and value.startswith("License ::"):
-                license_name = value.rsplit("::", 1)[1].strip()
-    return license_name or "?"
+    def validate(self, address: int, data: int) -> None:
+        if address in self.expected:
+            assert self.expected[address] == data, f"Mismatch at address {address}: expected {self.expected[address]}, got {data}"
 
+# Define the test coroutine using cocotb
+@cocotb.test()
+async def test_wb_interface(dut: Any) -> None:
+    """Test the Wishbone interface by performing write and read operations and validating results using a scoreboard.
 
-def _get_deps(base_deps: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    """Process dependencies and return details about each one."""
-    deps: dict[str, dict[str, Any]] = {}
-    for dep in base_deps:
-        parsed = regex.match(dep)
-        if not parsed:
-            continue
-        dep_name = parsed.group("dist").lower()
-        if dep_name not in lock_pkgs:
-            continue
-        deps[dep_name] = {
-            "license": _get_license(dep_name),
-            **parsed.groupdict(),
-            **lock_pkgs[dep_name],
-        }
+    Args:
+        dut: The device under test.
+    """
+    # Initialize clock and start it
+    clock = Clock(dut.clk, 10, units="ns")
+    cocotb.start_soon(clock.start())
 
-    again = True
-    while again:
-        again = False
-        for pkg_name, pkg_data in lock_pkgs.items():
-            if pkg_name in deps:
-                for pkg_dependency in pkg_data.get("dependencies", []):
-                    parsed = regex.match(pkg_dependency)
-                    if not parsed:
-                        continue
-                    dep_name = parsed.group("dist").lower()
-                    if dep_name in lock_pkgs and dep_name not in deps and dep_name != project.get("name"):
-                        deps[dep_name] = {
-                            "license": _get_license(dep_name),
-                            **parsed.groupdict(),
-                            **lock_pkgs[dep_name],
-                        }
-                        again = True
+    # Initialize the Wishbone driver, monitor, and scoreboard
+    driver = WishboneDriver(dut)
+    scoreboard = WishboneScoreboard()
 
-    return deps
+    # Add expected values for validation
+    scoreboard.add_expected(0x1000, 0xABCD)
+    scoreboard.add_expected(0x2000, 0x1234)
 
+    # Perform write and read operations, validate results
+    await driver.write(0x1000, 0xABCD)
+    read_data = await driver.read(0x1000)
+    scoreboard.validate(0x1000, read_data)
 
-def _render_credits() -> str:
-    """Render and generate the credit page for the project."""
-    dev_dependencies = _get_deps(chain(*pdm.get("dev-dependencies", {}).values()))
-    prod_dependencies = _get_deps(
-        chain(
-            project.get("dependencies", []),
-            chain(*project.get("optional-dependencies", {}).values()),
-        ),
-    )
+    await driver.write(0x2000, 0x1234)
+    read_data = await driver.read(0x2000)
+    scoreboard.validate(0x2000, read_data)
 
-    template_data = {
-        "project_name": project.get("name", ""),
-        "prod_dependencies": sorted(prod_dependencies.values(), key=lambda dep: dep["name"]),
-        "dev_dependencies": sorted(dev_dependencies.values(), key=lambda dep: dep["name"]),
-        "more_credits": "",  # Placeholder for any additional credits
-    }
-
-    template_text = dedent("""\
-        # Credits
-
-        These projects were used to build *{{ project_name }}*. **Thank you!**
-
-        [python](https://www.python.org/) |
-        [pdm](https://pdm.fming.dev/) |
-        [copier-pdm](https://github.com/pawamoy/copier-pdm)
-
-        {% macro dep_line(dep) -%}
-        [{{ dep.name }}](https://pypi.org/project/{{ dep.name }}/) | {{ dep.summary }} | {{ ("" ~ dep.spec ~ "") if dep.spec else "" }} | {{ dep.version }} | {{ dep.license }}
-        {%- endmacro %}
-
-        ### Runtime dependencies
-
-        Project | Summary | Version (accepted) | Version (last resolved) | License
-        ------- | ------- | ------------------ | ----------------------- | -------
-        {% for dep in prod_dependencies -%}
-        {{ dep_line(dep) }}
-        {% endfor %}
-
-        ### Development dependencies
-
-        Project | Summary | Version (accepted) | Version (last resolved) | License
-        ------- | ------- | ------------------ | ----------------------- | -------
-        {% for dep in dev_dependencies -%}
-        {{ dep_line(dep) }}
-        {% endfor %}
-
-        {% if more_credits %}**[More credits from the author]({{ more_credits }})**{% endif %}
-    """)
-
-    jinja_env = SandboxedEnvironment(undefined=StrictUndefined)
-    return jinja_env.from_string(template_text).render(**template_data)
-
-
-# Print out the generated credits
-print(_render_credits())
+# Generate the testbench for the Wishbone interface
+test_factory = TestFactory(test_wb_interface)
+test_factory.generate_tests()
