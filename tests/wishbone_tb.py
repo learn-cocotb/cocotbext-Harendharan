@@ -59,9 +59,11 @@ class WishboneScoreboard:
 @cocotb.test()
 async def test_wb_interface(dut: Any) -> None:
     """Test the Wishbone interface by performing write and read operations and validating results using a scoreboard.
+    
     Args:
         dut: The device under test.
     """
+    
     # Initialize clock and start it
     clock = Clock(dut.clk, 10, units="ns")  # 10 ns clock period
     cocotb.start_soon(clock.start())
