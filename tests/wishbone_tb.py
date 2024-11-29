@@ -1,8 +1,9 @@
+from typing import Any, Dict
 import cocotb
 from cocotb.regression import TestFactory
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge
-from typing import Any, Dict
+
 
 # Define the Wishbone interface driver
 class WishboneDriver:
