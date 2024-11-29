@@ -158,7 +158,7 @@ always @(*)
 
 initial begin
 $dumpfile("dump.vcd");
-$dumpvars(1,wb_interface);
+    $dumpvars(1,wishbone);
 end
 
 endmodule
