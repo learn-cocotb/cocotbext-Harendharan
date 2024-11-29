@@ -1,6 +1,6 @@
 `timescale 1ns/100ps
 
-module wb_interface(
+module wishbone(
     clk,             // interface side to outer world
     a_reset_l,
     wb_ack_i,
