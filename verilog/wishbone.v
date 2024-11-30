@@ -1,5 +1,4 @@
 `timescale 1ns/100ps
-
 module wishbone(
     clk,             // interface side to outer world
     a_reset_l,
